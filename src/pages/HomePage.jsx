@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import UploadArea from '../components/UploadArea.jsx';
 import ResultDisplay from '../components/ResultDisplay.jsx';
+// Import API utility functions that actually call your backend
 import { convertTextToCode, convertScreenshotToCode, convertFigmaToCode } from '../utils/api.js';
 
 function HomePage() {
@@ -9,6 +10,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // The actual conversion handler that makes API calls
   const handleConvert = async (type, input) => {
     setIsLoading(true);
     setErrorMessage('');
@@ -25,12 +27,12 @@ function HomePage() {
         throw new Error('Unknown conversion type');
       }
 
-      if (result.code) {
+      if (result && result.code) { // Check for result and result.code
         setGeneratedCode(result.code);
-      } else if (result.error) {
+      } else if (result && result.error) {
         setErrorMessage(result.error);
       } else {
-        setErrorMessage('Unexpected response from server.');
+        setErrorMessage('Unexpected response from server: No code or error provided.');
       }
     } catch (error) {
       console.error('Conversion error:', error);
