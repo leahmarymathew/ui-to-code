@@ -1,162 +1,120 @@
 # server/services/nlp_service.py
 import os
-import torch # Used to check for GPU availability and for model loading
-from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+import requests # For making HTTP requests to the Colab AI endpoint
+from dotenv import load_dotenv # To load COLAB_AI_API_URL from .env
 
-# --- Global variable for the loaded model and tokenizer ---
-# This will hold the text generation pipeline, loaded once when the Flask app starts.
-nlp_model_pipeline = None
+# Load environment variables (important for loading COLAB_AI_API_URL)
+load_dotenv()
 
-# Define the path where you are storing your fine-tuned model and tokenizer files.
-# This should match the path where you saved the model using the download_model.py script.
-# os.path.dirname(__file__) gets the current directory (services/)
-# '..' goes up one level (to server/)
-# 'models' enters the models directory
-# 'nlp_code_generator' is the specific folder for your NLP model files.
-MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'models', 'nlp_code_generator')
+# Get the URL of the Colab AI inference endpoint from environment variables.
+# This will be used to send text description requests to your Colab notebook.
+COLAB_AI_API_URL = os.environ.get('COLAB_AI_API_URL')
 
-# Attempt to load the model globally when the service module is imported (i.e., when app.py starts).
-# This prevents reloading the model for every API request, which would be very slow and inefficient.
-try:
-    if os.path.exists(MODEL_DIR) and os.path.isdir(MODEL_DIR):
-        print(f"[NLP Service] Attempting to load NLP model from: {MODEL_DIR}")
-        
-        # Load tokenizer: Responsible for converting text to numerical tokens and vice-versa.
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-        
-        # Load model: This loads the actual neural network weights and architecture.
-        # For small models like CodeGen-350M-mono, `device_map="auto"` might not be strictly necessary,
-        # but it's good practice for larger models. `torch_dtype=torch.float16` can save memory on GPU.
-        # For CPU-only, float16 is usually converted to float32 internally, so it might not offer much benefit.
-        model = AutoModelForCausalLM.from_pretrained(
-            MODEL_DIR,
-            # Use float16 to reduce memory usage if a GPU is available.
-            # If you encounter issues on CPU, you might try removing this line or setting to torch.float32.
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32, 
-            device_map="auto" # Automatically determines where to load model parts (GPU/CPU)
-        )
-
-        # Determine the device (GPU if available, otherwise CPU).
-        device = 0 if torch.cuda.is_available() else -1
-        
-        # Create a text generation pipeline: This is a high-level abstraction from Hugging Face
-        # that simplifies the process of tokenization, model inference, and decoding.
-        nlp_model_pipeline = pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            device=device # Assign the model to the determined device (GPU or CPU)
-        )
-        print("[NLP Service] NLP Model loaded successfully.")
-    else:
-        print(f"[NLP Service] NLP model directory not found at {MODEL_DIR}. Using placeholder logic.")
-except Exception as e:
-    print(f"[NLP Service] Could not load NLP model due to an error: {e}. Using placeholder logic.")
-    print(f"[NLP Service] Please ensure '{MODEL_DIR}' exists and contains valid Hugging Face model files.")
-
+if not COLAB_AI_API_URL:
+    print("[NLP Service] WARNING: COLAB_AI_API_URL not set in .env. Falling back to local placeholder.")
 
 def generate_code_from_text(text_description: str) -> str:
     """
-    Generates HTML/CSS code from a natural language text description using an NLP model.
+    Generates HTML/CSS code from a natural language text description by calling the Colab AI endpoint.
     """
     print(f"[NLP Service] Processing text - '{text_description}'")
 
-    # --- Actual Model Inference Logic ---
-    # This block executes if the NLP model was successfully loaded during application startup.
-    if nlp_model_pipeline: 
+    # --- Call Colab AI Endpoint ---
+    # This block executes if COLAB_AI_API_URL is set in your .env file.
+    if COLAB_AI_API_URL:
         try:
-            # Construct the prompt for the LLM.
-            # For CodeGen models, prompts are often expected as comments or direct instructions.
-            # The more explicit you are, the better, even for small models.
-            # Example prompt for CodeGen-350M-mono for Python: "def hello_world():"
-            # For HTML/CSS, we need to guide it more.
-            prompt = f"# Generate HTML and Tailwind CSS for the following UI description:\n# Description: {text_description}\n\n"
-            # Add a hint for the expected output format
-            prompt += "```html\n" 
-
-            # Generate code using the loaded pipeline
-            # Adjust generation parameters for optimal results with this specific model.
-            # - max_new_tokens: Maximum number of tokens (words/subwords) to generate.
-            #   Adjust based on typical code length you expect. 768 is a reasonable upper limit.
-            # - num_return_sequences: Number of different outputs to generate (usually 1 for simplicity).
-            # - do_sample: If True, uses sampling for more diverse outputs (vs. greedy decoding).
-            # - temperature: Controls the randomness of sampling. Lower (e.g., 0.1-0.5) makes output
-            #   more deterministic; higher (e.g., 0.7-1.0) makes it more creative/random.
-            # - top_k: Limits sampling to the top-k most probable next tokens.
-            # - top_p: Nucleus sampling; limits to tokens whose cumulative probability is less than top_p.
-            # - pad_token_id: Crucial for generation to stop cleanly when the model generates its
-            #   padding token (often same as EOS token).
+            # Prepare the payload for the Colab AI endpoint.
+            payload = {"text": text_description}
             
-            # Note: For CodeGen, its tokenizer's eos_token_id is usually 50256 (same as GPT-2).
-            # We explicitly set it for clarity and robustness.
-            generated_sequence = nlp_model_pipeline(
-                prompt,
-                max_new_tokens=768, 
-                num_return_sequences=1,
-                do_sample=True,
-                temperature=0.7,
-                top_k=50,
-                top_p=0.95,
-                pad_token_id=nlp_model_pipeline.tokenizer.eos_token_id 
-            )
+            # Make a POST request to the Colab AI endpoint.
+            # Set a generous timeout (e.g., 120 seconds) as Colab inference can still take time,
+            # especially for larger models or if the Colab instance is just warming up.
+            response = requests.post(COLAB_AI_API_URL, json=payload, timeout=120) # 120-second timeout
 
-            # Extract the generated text. The pipeline returns a list of dictionaries.
-            full_generated_text = generated_sequence[0]['generated_text']
+            # Raise an HTTPError for bad responses (4xx or 5xx status codes).
+            response.raise_for_status() 
 
-            # Post-process: Clean up the generated text.
-            # 1. Remove the original prompt from the generated text.
-            code = full_generated_text.replace(prompt, "").strip()
+            # Parse the JSON response from the Colab AI endpoint.
+            colab_response_data = response.json()
 
-            # 2. Remove common markdown code block fences if the model generates them.
-            # CodeGen often generates code within markdown blocks.
-            if code.startswith('```html'):
-                code = code[7:].strip() # Remove '```html'
-                if code.endswith('```'):
-                    code = code[:-3].strip() # Remove closing '```'
-            elif code.startswith('```'): # Generic markdown block
-                code_lines = code.split('\n')
-                if len(code_lines) > 2: # Check if there's content between fences
-                    code = '\n'.join(code_lines[1:-1]).strip() # Remove first and last lines
+            # Check if the response contains the 'code' field (success).
+            if "code" in colab_response_data:
+                generated_code = colab_response_data["code"]
+                print(f"[NLP Service] Generated code (first 200 chars from Colab):\n{generated_code[:200]}...")
+                return generated_code
+            # Check if the response contains an 'error' field.
+            elif "error" in colab_response_data:
+                error_msg = colab_response_data.get("message", colab_response_data["error"])
+                details = colab_response_data.get("details", "No further details.")
+                print(f"[NLP Service] Error from Colab AI: {error_msg} - Details: {details}")
+                # Re-raise as a generic Exception to be caught by the outer except block,
+                # ensuring a consistent error HTML is returned.
+                raise Exception(f"Colab AI Error: {error_msg} ({details})")
+            # Handle unexpected response formats from the Colab AI endpoint.
+            else:
+                raise Exception("Unexpected response format from Colab AI.")
 
-            # 3. Further refinement: CodeGen-350M-mono is Python-focused. 
-            # It might generate Python comments or Python-like structures.
-            # A simple heuristic to remove lines that look like Python comments or empty lines.
-            code_lines = [line for line in code.split('\n') if not line.strip().startswith('#') and line.strip() != '']
-            code = "\n".join(code_lines).strip()
-            
-            # You might want to add more sophisticated parsing/validation here,
-            # e.g., using a simple HTML parser to check for well-formedness of tags.
+        # --- Error Handling for requests to Colab AI Endpoint ---
 
-            print(f"[NLP Service] Generated code (first 200 chars):\n{code[:200]}...")
-            return code
-
+        # Handles cases where the request times out.
+        except requests.exceptions.Timeout:
+            print("[NLP Service] Colab AI request timed out.")
+            return f"""
+<div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+    <p>Error: AI conversion timed out. Colab might be too slow or disconnected.</p>
+    <p>Please check the Colab notebook and try again.</p>
+</div>
+            """
+        # Handles network-related errors (e.g., Colab server down, ngrok not running).
+        except requests.exceptions.ConnectionError:
+            print("[NLP Service] Could not connect to Colab AI endpoint. Is ngrok running and URL correct?")
+            return f"""
+<div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+    <p>Error: Could not connect to Colab AI endpoint. Ensure your Colab notebook is running and ngrok is active.</p>
+</div>
+            """
+        # Handles other HTTP-related errors (e.g., 4xx, 5xx responses from Colab Flask app).
+        except requests.exceptions.RequestException as e:
+            print(f"[NLP Service] Request error to Colab AI: {e}")
+            return f"""
+<div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+    <p>Error: Failed to get response from Colab AI: {str(e)}</p>
+    <p>Check Colab notebook output for details.</p>
+</div>
+            """
+        # Catches any other unexpected errors during the process.
         except Exception as e:
-            print(f"[NLP Service] Error during NLP model inference: {e}")
-            # If an error occurs during inference, fall back to the placeholder logic.
-            pass 
+            print(f"[NLP Service] Unexpected error in Colab AI call: {e}")
+            return f"""
+<div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+    <p>Error: An unexpected error occurred during AI conversion: {str(e)}</p>
+</div>
+            """
+    # --- Fallback to Local Placeholder ---
+    # This block executes if COLAB_AI_API_URL is NOT set (meaning you want to use local inference),
+    # or if any of the exceptions above occurred during the call to the Colab AI endpoint.
+    else:
+        print("[NLP Service] COLAB_AI_API_URL not set or Colab call failed. Using local placeholder logic.")
 
-    # --- Placeholder Logic (Fallback if model not loaded or inference fails) ---
-    # This section will be executed if the NLP model failed to load during startup,
-    # or if an error occurred during inference (and caught above).
-    text_description_lower = text_description.lower()
-    if "button" in text_description_lower and "blue" in text_description_lower:
-        return "<button class='bg-blue-500 text-white p-2 rounded-md shadow-md hover:bg-blue-600 transition-colors'>Blue Button</button>"
-    elif "heading" in text_description_lower and "large" in text_description_lower:
-        return "<h1 class='text-4xl font-bold text-gray-800 mb-4'>Large Heading</h1>"
-    elif "input field" in text_description_lower:
-        return "<input type='text' placeholder='Enter text...' class='border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent'>"
-    elif "card" in text_description_lower:
-        return """
+        # Your original local placeholder logic (as defined in previous steps).
+        text_description_lower = text_description.lower()
+        if "button" in text_description_lower and "blue" in text_description_lower:
+            return "<button class='bg-blue-500 text-white p-2 rounded-md shadow-md hover:bg-blue-600 transition-colors'>Blue Button</button>"
+        elif "heading" in text_description_lower and "large" in text_description_lower:
+            return "<h1 class='text-4xl font-bold text-gray-800 mb-4'>Large Heading</h1>"
+        elif "input field" in text_description_lower:
+            return "<input type='text' placeholder='Enter text...' class='border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent'>"
+        elif "card" in text_description_lower:
+            return """
 <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm mx-auto">
     <h2 class="text-xl font-semibold mb-2">Sample Card</h2>
     <p class="text-gray-600">This is a simple card component.</p>
     <button class="mt-4 bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600">Learn More</button>
 </div>
-        """
-    return f"""
+            """
+        return f"""
 <div class="p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-md">
-    <p>Placeholder for text-to-code conversion.</p>
-    <p>NLP model not loaded or inference failed. Using fallback logic.</p>
+    <p>Fallback: AI model not available or call failed.</p>
     <p>Current input: "{text_description}"</p>
 </div>
-    """
+        """
