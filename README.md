@@ -3,41 +3,41 @@
 
 ## Project Overview
 
-The UI to Code Converter is an innovative application designed to streamline the front-end development process by transforming various design inputs into functional code. Leveraging advanced AI models and sophisticated parsing techniques, this tool aims to convert natural language descriptions, visual screenshots, and Figma design URLs directly into clean HTML and Tailwind CSS.
+The UI to Code Converter is a full-stack web application that transforms design inputs into functional HTML and Tailwind CSS code. It accepts three types of input: a plain-text UI description, a screenshot image, or a Figma design URL, and returns ready-to-use front-end code.
 
-This project demonstrates a full-stack approach using React for the frontend, Flask for the backend API, and integrates a powerful Large Language Model (LLM) hosted on Google Colab for AI inference, bypassing local hardware limitations.
+The frontend is built with React 19 and Vite, the backend is a Python Flask API, and text-to-code generation is powered by a Large Language Model (Mistral-7B-Instruct) running on a free Google Colab GPU instance, exposed to the local backend via an ngrok tunnel. This architecture lets you leverage powerful AI inference without any local GPU requirement.
 
 ## Features
 
-* **Text to Code:** Convert natural language UI descriptions (e.g., "a blue button with white text", "a responsive navigation bar") into HTML/Tailwind CSS.
-* **Screenshot to Code (Placeholder):** Future capability to convert UI screenshots into code using Computer Vision. Currently uses a placeholder.
-* **Figma to Code (Placeholder):** Future capability to convert Figma design URLs into code by parsing Figma API data. Currently uses a placeholder.
-* **Responsive UI:** A user-friendly interface built with React and Tailwind CSS.
-* **Modular Backend:** Flask API serving as a bridge between the frontend and AI services.
-* **Cloud AI Integration:** Utilizes Google Colab's free GPU resources to run a powerful LLM (Mistral-7B) for faster AI inference.
+* **Text to Code:** Convert natural language UI descriptions (e.g., "a blue button with white text", "a responsive navigation bar") into HTML/Tailwind CSS via a Mistral-7B model hosted on Google Colab.
+* **Screenshot to Code (Placeholder):** Upload a UI screenshot; full Computer Vision inference is planned for a future release. Currently returns a styled placeholder response.
+* **Figma to Code (Placeholder):** Paste a Figma design URL; full Figma API parsing is planned for a future release. Currently fetches Figma data and returns a placeholder response.
+* **Responsive UI:** Single-page React app with state-based navigation (Home / About) and Tailwind CSS styling.
+* **Modular Backend:** Flask API with Blueprint-based routing (`/api/text-to-code`, `/api/screenshot-to-code`, `/api/figma-to-code`).
+* **Cloud AI Integration:** Uses Google Colab's free GPU resources to run Mistral-7B-Instruct-v0.2 with 4-bit quantisation for fast inference, tunnelled via ngrok.
+* **Local Fallback:** When `COLAB_AI_API_URL` is not set, the NLP service falls back to a set of keyword-based HTML/Tailwind snippets so the app remains usable offline.
 
 ## Technologies Used
 
 **Frontend:**
-* **React:** A JavaScript library for building user interfaces.
-* **Vite:** A fast build tool for modern web projects.
-* **Tailwind CSS:** A utility-first CSS framework for rapid UI development.
+* **React 19** – component-based UI library.
+* **Vite 7** – fast development server and build tool.
+* **Tailwind CSS 4** – utility-first CSS framework.
 
 **Backend (Local Flask API):**
-* **Python:** The programming language.
-* **Flask:** A lightweight web framework for building APIs.
-* **Flask-CORS:** Enables Cross-Origin Resource Sharing.
-* **python-dotenv:** For managing environment variables.
-* **requests:** For making HTTP requests to the Colab AI endpoint.
+* **Python 3.8+**
+* **Flask 3** – lightweight web framework.
+* **Flask-CORS** – Cross-Origin Resource Sharing support.
+* **python-dotenv** – environment variable management.
+* **requests** – HTTP client used by the NLP service to call the Colab endpoint.
 
 **AI Inference Endpoint (Google Colab):**
-* **Python:** For scripting.
-* **Google Colab:** Free cloud platform for running Python notebooks with GPU access.
-* **`mistralai/Mistral-7B-Instruct-v0.2`:** The Large Language Model used for text-to-code generation (hosted on Colab).
-* **Hugging Face Transformers:** Library for working with LLMs.
-* **PyTorch:** Deep learning framework used by the LLM.
-* **Accelerate & BitsAndBytes:** For efficient (4-bit quantized) loading of LLMs onto GPU.
-* **`pyngrok`:** A Python wrapper for `ngrok`, used to create a public URL for the Colab-hosted Flask app.
+* **Google Colab** – free cloud GPU platform.
+* **`mistralai/Mistral-7B-Instruct-v0.2`** – LLM used for text-to-code generation.
+* **Hugging Face Transformers** – model loading and text-generation pipeline.
+* **PyTorch** – deep learning runtime.
+* **Accelerate & BitsAndBytes** – 4-bit quantised model loading.
+* **`pyngrok`** – creates a public HTTPS tunnel to the Colab Flask server.
 
 ## Prerequisites
 
@@ -57,40 +57,35 @@ Follow these steps carefully to get the application running locally and connect 
 ### 1. Clone the Repository
 
 ```bash
-git clone [https://github.com/your-username/your-app-name.git](https://github.com/your-username/your-app-name.git) # Replace with your repo URL
-cd your-app-name
-````
+git clone https://github.com/leahmarymathew/ui-to-code.git
+cd ui-to-code
+```
 
-### 2\. Backend Setup (Local Flask API)
+### 2. Backend Setup (Local Flask API)
 
-1.  **Create a Python Virtual Environment:**
+1.  **Create a Python Virtual Environment** (from the project root):
     ```bash
-    cd server
     python -m venv venv
     ```
 2.  **Activate the Virtual Environment:**
       * Windows: `.\venv\Scripts\activate`
       * macOS/Linux: `source venv/bin/activate`
-3.  **Install Backend Dependencies:**
+3.  **Install Backend Dependencies** (the `requirements.txt` is in the project root):
     ```bash
     pip install -r requirements.txt
-    ```
-    (Your `requirements.txt` should contain `Flask`, `Flask-CORS`, `python-dotenv`, `requests`). If `requirements.txt` is missing, you can create it by running `pip freeze > requirements.txt` after manually installing those packages.)
-4.  **Return to Project Root:**
-    ```bash
-    cd ..
+    pip install requests  # add requests if not already listed
     ```
 
-### 3\. Frontend Setup (Local React App)
+### 3. Frontend Setup (Local React App)
 
 1.  **Install Frontend Dependencies:**
     ```bash
     npm install
     ```
 
-### 4\. Environment Variables (`.env` file)
+### 4. Environment Variables (`.env` file)
 
-Create a `.env` file in the **root directory** of your project (`your-app-name/.env`).
+Create a `.env` file in the **project root** (`ui-to-code/.env`).
 
 ```dotenv
 # .env
@@ -104,16 +99,17 @@ FLASK_APP=server/app.py
 FLASK_RUN_PORT=5000
 
 # Figma API Key (Replace with your actual key from Figma developer settings)
-# Get it from: [https://www.figma.com/developers/api](https://www.figma.com/developers/api)
+# Get it from: https://www.figma.com/developers/api
+# Note: the env var name in code is intentionally FPGMA_API_KEY
 FPGMA_API_KEY=your_figma_personal_access_token_here
 
-# Colab AI Inference Endpoint URL (THIS WILL BE UPDATED LATER)
+# Colab AI Inference Endpoint URL (set after running the Colab notebook)
 COLAB_AI_API_URL=
 ```
 
-**Important:** Do NOT commit your `.env` file to Git. It's listed in `.gitignore`.
+**Important:** Do NOT commit your `.env` file to Git. It is listed in `.gitignore`.
 
-### 5\. AI Model Setup (Google Colab Integration)
+### 5. AI Model Setup (Google Colab Integration)
 
 This is where you set up the GPU-powered AI endpoint.
 
@@ -136,11 +132,11 @@ This is where you set up the GPU-powered AI endpoint.
     # --- IMPORTANT: Install PyTorch with compatible torchvision/torchaudio for CUDA ---
     # First, run !nvidia-smi in a new Colab cell to find your CUDA Version (e.g., CUDA Version: 12.4).
     # Then, use the matching index-url. Example for CUDA 12.4:
-    !pip install -q torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu124](https://download.pytorch.org/whl/cu124)
+    !pip install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
     # Login to Hugging Face (optional but recommended for rate limits and gated models)
     # You'll be prompted to enter your Hugging Face token interactively.
-    # Get your token from: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) (ensure 'Read' access)
+    # Get your token from: https://huggingface.co/settings/tokens (ensure 'Read' access)
     from huggingface_hub import login
     try:
         login()
@@ -291,28 +287,26 @@ This is where you set up the GPU-powered AI endpoint.
 6.  **Get the Public `ngrok` URL:** After running the Flask API cell in Colab, copy the `https://YOUR_RANDOM_ID.ngrok-free.app` URL.
 
 7.  **Update Your Local `.env` File (Final Step for `COLAB_AI_API_URL`):**
-    In your project's root directory (`your-app-name/.env`), set:
+    In your project's root directory (`ui-to-code/.env`), set:
 
     ```dotenv
     COLAB_AI_API_URL=YOUR_COPIED_NGROK_URL_HERE/generate-code
     ```
 
-    (Remember to include `/generate-code` at the end\!)
+    (Remember to include `/generate-code` at the end!)
 
-### 6\. Run the Application
+### 6. Run the Application
 
-1.  **Ensure Colab is Running:** Keep your Google Colab tab **open and connected** to the runtime. If it disconnects, you'll need to rerun the relevant Colab cells to get a new `ngrok` URL and update your local `.env`.
-2.  **Start Local Flask Backend:**
-    Open your terminal, navigate to `your-app-name/server`, activate your virtual environment, and run:
+1.  **Ensure Colab is Running:** Keep your Google Colab tab **open and connected** to the runtime. If it disconnects, rerun the relevant Colab cells to get a new `ngrok` URL and update your local `.env`.
+2.  **Start Local Flask Backend** (from the project root, with virtual environment activated):
     ```bash
-    python app.py
+    python server/app.py
     ```
-3.  **Start Local React Frontend:**
-    Open a **new** terminal, navigate to your project root `your-app-name/`, and run:
+3.  **Start Local React Frontend** (from the project root in a new terminal):
     ```bash
     npm run dev
     ```
-4.  **Open in Browser:** Access your frontend application at `http://localhost:5173/` (or whatever Vite displays).
+4.  **Open in Browser:** Navigate to `http://localhost:5173/` (or the URL shown by Vite).
 
 ## Usage
 
@@ -325,38 +319,44 @@ This is where you set up the GPU-powered AI endpoint.
 ## Project Structure
 
 ```
-your-app-name/
-├── .env                 # Environment variables (IGNORED by Git)
-├── .gitignore           # Git ignore rules
-├── package.json         # Frontend dependencies
-├── public/              # Frontend static assets
-│   └── index.html
+ui-to-code/
+├── .env                   # Environment variables (IGNORED by Git)
+├── .gitignore             # Git ignore rules
+├── index.html             # Vite HTML entry point
+├── package.json           # Frontend dependencies (React, Vite, Tailwind CSS)
+├── requirements.txt       # Python backend dependencies
+├── vite.config.js         # Vite configuration
+├── public/                # Static assets served by Vite
 │   └── vite.svg
-├── src/                 # Frontend source code (React)
-│   ├── components/      # Reusable React components (Header, UploadArea, CodeEditor, ResultDisplay)
-│   ├── pages/           # Main application pages (HomePage, AboutPage)
-│   ├── styles/          # Global CSS (index.css)
-│   ├── utils/           # Utility functions (api.js for backend calls)
-│   ├── App.jsx          # Main React application component
-│   └── main.jsx         # Vite's React entry point
-├── server/              # Backend source code (Flask)
-│   ├── venv/            # Python virtual environment (IGNORED by Git)
-│   ├── app.py           # Flask application entry point
-│   ├── requirements.txt # Python dependencies list
-│   ├── routes/          # API endpoint definitions
-│   │   ├── __init__.py
-│   │   ├── figma_to_code.py
-│   │   ├── screenshot_to_code.py
-│   │   └── text_to_code.py
-│   ├── services/        # Business logic / AI integration (e.g., nlp_service.py calls Colab)
-│   │   ├── __init__.py
-│   │   ├── figma_service.py
-│   │   ├── nlp_service.py
-│   │   └── vision_service.py
-│   ├── models/          # Directory for AI model files (locally downloaded - IGNORED by Git)
-│   │   └── __init__.py
-│   └── uploads/         # Temporary file uploads (IGNORED by Git)
-└── vite.config.js       # Vite configuration file
+├── src/                   # Frontend source code (React)
+│   ├── App.jsx            # Root component with state-based page navigation
+│   ├── main.jsx           # Vite React entry point
+│   ├── index.css          # Global styles (Tailwind CSS directives)
+│   ├── components/        # Reusable React components
+│   │   ├── Header.jsx     # Top navigation bar (Home / About)
+│   │   ├── UploadArea.jsx # Input panel (text, screenshot, Figma URL)
+│   │   ├── CodeEditor.jsx # Generated code display with copy button
+│   │   └── ResultDisplay.jsx # Loading / error / result wrapper
+│   ├── pages/             # Page-level components
+│   │   ├── HomePage.jsx   # Main conversion page
+│   │   └── AboutPage.jsx  # About page
+│   └── utils/
+│       └── api.js         # Fetch helpers for all three backend endpoints
+└── server/                # Backend source code (Flask)
+    ├── app.py             # Flask app entry point; registers blueprints
+    ├── download_model.py  # Utility to download Salesforce/codegen-350M-mono locally
+    ├── routes/            # Blueprint route handlers
+    │   ├── __init__.py
+    │   ├── text_to_code.py        # POST /api/text-to-code
+    │   ├── screenshot_to_code.py  # POST /api/screenshot-to-code
+    │   └── figma_to_code.py       # POST /api/figma-to-code
+    ├── services/          # Business logic / AI integration
+    │   ├── __init__.py
+    │   ├── nlp_services.py    # Calls Colab AI endpoint; keyword fallback
+    │   ├── figma_services.py  # Fetches Figma API data (placeholder conversion)
+    │   └── vision_services.py # Screenshot processing (placeholder)
+    └── models/            # Directory for locally downloaded model files (IGNORED by Git)
+        └── __init__.py
 ```
 
 ## Future Enhancements
